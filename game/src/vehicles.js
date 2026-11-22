@@ -10,6 +10,8 @@ export const CAR_KINDS = {
   taxi: { len: 64, wid: 32, maxSpeed: 470, accel: 380, colors: ['#f2c230'] },
   sport: { len: 66, wid: 30, maxSpeed: 580, accel: 490, colors: ['#d94f4f', '#2ec4b6', '#e8e8e8'] },
   truck: { len: 86, wid: 36, maxSpeed: 370, accel: 260, colors: ['#8a7a5a', '#5a6e8a', '#a0a0a0'] },
+  van: { len: 80, wid: 34, maxSpeed: 400, accel: 300, colors: ['#7a8a99', '#c9a24f', '#5e7a8a'] },
+  muscle: { len: 68, wid: 34, maxSpeed: 545, accel: 470, colors: ['#8a2f2f', '#2f4f8a', '#e8b13c'] },
   police: { len: 66, wid: 32, maxSpeed: 560, accel: 460, colors: ['#1d2733'] },
 };
 
@@ -54,9 +56,10 @@ export function carCircles(car) {
 /** Spawn the city's traffic and parked cars. */
 export function spawnCityCars(game) {
   const rng = game.rng;
-  for (let i = 0; i < 14; i += 1) {
+  for (let i = 0; i < 18; i += 1) {
     const p = randomRoadPoint(rng);
-    const kind = rng.chance(0.14) ? 'taxi' : rng.chance(0.12) ? 'truck' : rng.chance(0.14) ? 'sport' : 'sedan';
+    const roll = rng.range(0, 1);
+    const kind = roll < 0.12 ? 'taxi' : roll < 0.24 ? 'truck' : roll < 0.34 ? 'van' : roll < 0.44 ? 'muscle' : roll < 0.56 ? 'sport' : 'sedan';
     const car = createCar(kind, p.x, p.y, p.angle);
     car.driver = 'traffic';
     car.axis = p.axis;
@@ -72,6 +75,8 @@ export function spawnCityCars(game) {
     { x: 300, y: 930, angle: Math.PI / 2, kind: 'sedan', color: '#4f7ac9' },
     { x: 1500, y: 330, angle: 0, kind: 'truck', color: '#8a7a5a' },
     { x: 2100, y: 930, angle: Math.PI / 2, kind: 'sedan', color: '#c9a24f' },
+    { x: 1560, y: 2700, angle: 0, kind: 'van', color: '#7a8a99' },
+    { x: 2700, y: 930, angle: Math.PI / 2, kind: 'muscle', color: '#8a2f2f' },
   ];
   for (const spot of parked) {
     const car = createCar(spot.kind, spot.x, spot.y, spot.angle, spot.color);
@@ -107,6 +112,8 @@ export function enterCar(game, car) {
       speed: 80,
       state: 'flee',
       color: '#d9a066',
+      kind: 'walker',
+      r: 9,
       timer: 3,
       down: 0,
       axis: 'h',
@@ -285,9 +292,21 @@ export function collideCarsAndPeds(game, dt) {
               game.events.push({ type: 'carCrash', speed: impact });
             }
           }
+          // Speed exchange: a moving car slows, but a (near-)stationary car
+          // does not roll away when bumped — it just gets pushed aside.
+          const aMoving = a.speed >= 30;
+          const bMoving = b.speed >= 30;
           const avg = (a.speed + b.speed) / 2;
-          a.speed = avg;
-          b.speed = avg;
+          if (aMoving && bMoving) {
+            a.speed = avg;
+            b.speed = avg;
+          } else if (aMoving) {
+            a.speed *= 0.7;
+            b.speed = 0;
+          } else if (bMoving) {
+            b.speed *= 0.7;
+            a.speed = 0;
+          }
         }
       }
     }
@@ -312,7 +331,7 @@ export function collideCarsAndPeds(game, dt) {
       }
     }
   }
-  // Broken cars smoke and stop.
+  // Broken cars smoke and stop; battered ones already trail dark smoke.
   for (const car of cars) {
     if (car.health <= 0 && !car.broken) {
       car.broken = true;
@@ -330,6 +349,18 @@ export function collideCarsAndPeds(game, dt) {
         maxLife: 1,
         color: '#999999',
         size: 5,
+      });
+    }
+    if (!car.broken && car.health < 50 && Math.random() < dt * 3) {
+      game.particles.push({
+        x: car.x - Math.cos(car.angle) * car.len / 2 + (Math.random() - 0.5) * 14,
+        y: car.y - Math.sin(car.angle) * car.len / 2 + (Math.random() - 0.5) * 14,
+        vx: (Math.random() - 0.5) * 16,
+        vy: -30 - Math.random() * 25,
+        life: 0.9,
+        maxLife: 0.9,
+        color: '#555555',
+        size: 4,
       });
     }
   }

@@ -61,6 +61,22 @@ function drawCarShape(ctx, car, time) {
   ctx.fillStyle = '#ffe9a8';
   ctx.fillRect(len / 2 - 2, -wid / 2 + 4, 3, 5);
   ctx.fillRect(len / 2 - 2, wid / 2 - 9, 3, 5);
+  if (car.kind === 'van') {
+    // Boxy cargo van: a long roof panel and a rear window.
+    ctx.fillStyle = 'rgba(20,28,38,0.85)';
+    roundRect(ctx, -len / 2 + 8, -wid / 2 + 5, len - 30, wid - 10, 4);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(120,180,220,0.5)';
+    ctx.fillRect(len / 2 - 16, -wid / 2 + 7, 8, wid - 14);
+  }
+  if (car.kind === 'muscle') {
+    // Racing stripe down the hood.
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fillRect(len / 2 - 26, -3, 20, 6);
+    ctx.fillStyle = 'rgba(20,28,38,0.85)';
+    roundRect(ctx, -len / 2 + 12, -wid / 2 + 6, len - 24, wid - 12, 5);
+    ctx.fill();
+  }
   if (car.kind === 'taxi') {
     ctx.fillStyle = '#1d2733';
     ctx.fillRect(-8, -wid / 2 + 2, 16, 8);
@@ -93,6 +109,7 @@ function drawCarShape(ctx, car, time) {
 }
 
 function drawPedShape(ctx, ped, time) {
+  const r = ped.r || 9;
   ctx.save();
   ctx.translate(ped.x, ped.y);
   if (ped.down > 0) {
@@ -108,17 +125,22 @@ function drawPedShape(ctx, ped, time) {
   // Shadow.
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath();
-  ctx.ellipse(4, 3, 10, 6, 0, 0, Math.PI * 2);
+  ctx.ellipse(4, 3, r + 1, r * 0.66, 0, 0, Math.PI * 2);
   ctx.fill();
   // Body.
   ctx.fillStyle = ped.color;
   ctx.beginPath();
-  ctx.arc(0, 0, 9, 0, Math.PI * 2);
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#2b2622';
   ctx.beginPath();
   ctx.arc(4, -3, 5, 0, Math.PI * 2);
   ctx.fill();
+  // Hi-vis vest for workers.
+  if (ped.kind === 'worker') {
+    ctx.fillStyle = '#f2c230';
+    ctx.fillRect(-r + 2, -3, (r - 2) * 2, 6);
+  }
   ctx.restore();
   void time;
 }
@@ -182,12 +204,36 @@ export function drawWorld(renderer, game, view) {
   // Ground.
   ctx.fillStyle = PALETTE.ground;
   ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  // The beach: water at the far west edge, sand, then the boardwalk road.
+  const beach = game.city.beach;
+  if (beach) {
+    ctx.fillStyle = '#2e6f8a';
+    ctx.fillRect(0, y0, beach.water.w, y1 - y0);
+    ctx.fillStyle = '#3f8aa8';
+    for (let wy = 0; wy < WORLD.size; wy += 130) {
+      ctx.fillRect(beach.water.x + 14, wy + 30, 60, 4);
+      ctx.fillRect(beach.water.x + 40, wy + 90, 44, 4);
+    }
+    ctx.fillStyle = '#d9c08a';
+    ctx.fillRect(beach.sand.x, y0, beach.sand.w, y1 - y0);
+  }
   // Parks.
   for (const park of game.city.parks) {
     ctx.fillStyle = PALETTE.park;
     ctx.fillRect(park.x, park.y, park.w, park.h);
     ctx.fillStyle = PALETTE.parkDark;
     ctx.fillRect(park.x + 8, park.y + 8, park.w - 16, park.h - 16);
+  }
+  // The pond in Sunset Park.
+  for (const pond of game.city.ponds || []) {
+    ctx.fillStyle = '#3f8aa8';
+    ctx.beginPath();
+    ctx.ellipse(pond.x, pond.y, pond.r, pond.r * 0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#5fa8c4';
+    ctx.beginPath();
+    ctx.ellipse(pond.x - 14, pond.y - 10, pond.r * 0.6, pond.r * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
   // Roads: asphalt, sidewalks, lane dashes, crosswalks.
   const centers = roadCenters();
@@ -239,6 +285,44 @@ export function drawWorld(renderer, game, view) {
     ctx.arc(tree.x - 3, tree.y - 3, tree.r * 0.6, 0, Math.PI * 2);
     ctx.fill();
   }
+  // Palms along the beach and the plaza: a leaning trunk and a crown of fronds.
+  for (const palm of game.city.beach.palms) {
+    ctx.strokeStyle = '#7a5a3a';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(palm.x, palm.y);
+    ctx.lineTo(palm.x + 6, palm.y - 22);
+    ctx.stroke();
+    ctx.strokeStyle = '#4d7a2e';
+    ctx.lineWidth = 4;
+    for (let f = 0; f < 5; f += 1) {
+      const a = -Math.PI / 2 + (f - 2) * 0.55;
+      ctx.beginPath();
+      ctx.moveTo(palm.x + 6, palm.y - 22);
+      ctx.quadraticCurveTo(
+        palm.x + 6 + Math.cos(a) * 14,
+        palm.y - 22 + Math.sin(a) * 14 - 6,
+        palm.x + 6 + Math.cos(a) * 22,
+        palm.y - 22 + Math.sin(a) * 22 + 8,
+      );
+      ctx.stroke();
+    }
+  }
+  // Street lamps: a warm glow at every intersection corner.
+  for (const lamp of game.city.lamps) {
+    ctx.fillStyle = 'rgba(255,200,110,0.28)';
+    ctx.beginPath();
+    ctx.arc(lamp.x, lamp.y, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#2b2622';
+    ctx.beginPath();
+    ctx.arc(lamp.x, lamp.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffd98a';
+    ctx.beginPath();
+    ctx.arc(lamp.x, lamp.y, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
   // Buildings: long shadow, walls, roof lines, lit windows.
   for (const b of game.city.buildings) {
     if (b.x > x1 || b.x + b.w < x0 || b.y > y1 || b.y + b.h < y0) continue;
@@ -262,6 +346,44 @@ export function drawWorld(renderer, game, view) {
       }
     }
   }
+  // The Old Market stalls: striped awnings and crates of goods.
+  for (const stall of game.city.stalls || []) {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(stall.x + 6, stall.y + 6, stall.w, stall.h);
+    ctx.fillStyle = '#8a7a5a';
+    ctx.fillRect(stall.x, stall.y, stall.w, stall.h);
+    ctx.fillStyle = stall.color;
+    ctx.fillRect(stall.x, stall.y, stall.w, 26);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    for (let s = 0; s < stall.w; s += 36) ctx.fillRect(stall.x + s, stall.y, 18, 26);
+    ctx.fillStyle = '#e8b13c';
+    ctx.beginPath();
+    ctx.arc(stall.x + 40, stall.y + 60, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#c94f4f';
+    ctx.beginPath();
+    ctx.arc(stall.x + 90, stall.y + 66, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#5d8a44';
+    ctx.beginPath();
+    ctx.arc(stall.x + 140, stall.y + 58, 10, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Landmark signs by the city's places.
+  for (const mark of game.city.landmarks || []) {
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(mark.x - 2, mark.y - 26, 4, 30);
+    ctx.fillStyle = '#1d2733';
+    ctx.font = 'bold 11px ' + FONT;
+    const labelW = ctx.measureText(mark.label).width + 18;
+    ctx.fillRect(mark.x - labelW / 2, mark.y - 46, labelW, 22);
+    ctx.strokeStyle = '#f2c230';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(mark.x - labelW / 2, mark.y - 46, labelW, 22);
+    ctx.fillStyle = '#f5efe4';
+    ctx.textAlign = 'center';
+    ctx.fillText(mark.label, mark.x, mark.y - 31);
+  }
   // Bat pickup.
   if (game.bat && !game.bat.taken) {
     ctx.save();
@@ -281,6 +403,10 @@ export function drawWorld(renderer, game, view) {
   if (game.taxi) {
     const t = game.taxi.phase === 'pickup' ? game.taxi.pickup : game.taxi.dropoff;
     drawMarker(ctx, t.x, t.y, '#2ec4b6', game.time);
+  }
+  if (game.delivery) {
+    const d = game.delivery.phase === 'pickup' ? game.delivery.pickup : game.delivery.dropoff;
+    drawMarker(ctx, d.x, d.y, '#ff9f43', game.time);
   }
   if (game.trial.active) {
     const next = game.trial.cp < 3 ? game.trial.next : null;

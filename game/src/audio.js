@@ -161,6 +161,10 @@ export function createAudio() {
       notes.forEach((freq, i) => setTimeout(() => blip(freq, 0.18, 'triangle', 0.3), i * 110));
     },
     busted() { blip(220, 0.5, 'sawtooth', 0.25, 110); },
+    /** Short police radio squawk when a new unit joins the chase. */
+    radio() { blip(1250, 0.07, 'square', 0.12); setTimeout(() => blip(980, 0.09, 'square', 0.12), 80); },
+    /** Two-note chime when a delivery job is taken. */
+    delivery() { blip(660, 0.1, 'triangle', 0.25); setTimeout(() => blip(990, 0.14, 'triangle', 0.25), 110); },
     click() { blip(660, 0.05, 'square', 0.15); },
   };
 }

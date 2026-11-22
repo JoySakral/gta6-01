@@ -7,6 +7,7 @@ export const ACTION_INTERACT = 4;
 export const ACTION_PUNCH = 8;
 export const ACTION_MISSIONS = 16;
 export const ACTION_TAXI = 32;
+export const ACTION_DELIVERY = 64;
 
 const CONFIRM_KEYS = new Set(['Enter', ' ']);
 const PAUSE_KEYS = new Set(['p', 'P', 'Escape']);
@@ -14,6 +15,7 @@ const INTERACT_KEYS = new Set(['e', 'E']);
 const PUNCH_KEYS = new Set([' ']);
 const MISSION_KEYS = new Set(['m', 'M']);
 const TAXI_KEYS = new Set(['t', 'T']);
+const DELIVERY_KEYS = new Set(['g', 'G']);
 
 export function createInput(canvas) {
   const keys = new Set();
@@ -88,6 +90,7 @@ export function createInput(canvas) {
       if (hasAny(PUNCH_KEYS, pressed)) actions |= ACTION_PUNCH;
       if (hasAny(MISSION_KEYS, pressed)) actions |= ACTION_MISSIONS;
       if (hasAny(TAXI_KEYS, pressed)) actions |= ACTION_TAXI;
+      if (hasAny(DELIVERY_KEYS, pressed)) actions |= ACTION_DELIVERY;
       return actions;
     },
     /** Clear the pressed edges and the click flag at the end of a frame. */

@@ -72,6 +72,13 @@ export function drawMinimap(ctx, game, x, y, size) {
     ctx.arc(x + t.x * scale, y + t.y * scale, 4, 0, Math.PI * 2);
     ctx.fill();
   }
+  if (game.delivery) {
+    const d = game.delivery.phase === 'pickup' ? game.delivery.pickup : game.delivery.dropoff;
+    ctx.fillStyle = '#ff9f43';
+    ctx.beginPath();
+    ctx.arc(x + d.x * scale, y + d.y * scale, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
   // Cars.
   for (const car of game.cars) {
     ctx.fillStyle = car.driver === 'police' ? (Math.floor(game.time * 4) % 2 ? '#3f7de0' : '#e23b3b') : '#c9c9c9';
@@ -221,7 +228,7 @@ export function drawTitle(ctx, game, view, hasSave) {
   ctx.fillStyle = PALETTE.text;
   ctx.font = 'bold 15px ' + FONT;
   ctx.fillText('WASD move / drive   •   E enter or steal a car   •   SPACE punch   •   SHIFT run', w / 2, h * 0.52);
-  ctx.fillText('P pause   •   M missions   •   T call a taxi fare   •   drive through the pier gate for a time trial', w / 2, h * 0.52 + 26);
+  ctx.fillText('P pause   •   M missions   •   T taxi fare   •   G delivery run   •   pier gate: time trial', w / 2, h * 0.52 + 26);
   const bw = 260;
   const bh = 54;
   const bx = w / 2 - bw / 2;
@@ -285,7 +292,7 @@ export function drawMissionList(ctx, game, view) {
   });
   ctx.fillStyle = PALETTE.muted;
   ctx.font = '15px ' + FONT;
-  ctx.fillText('Side work: press T on foot to call a taxi fare. Drive through the Sunset Pier gate for a time trial.', 60, 120 + STORY.length * 64 + 20);
+  ctx.fillText('Side work: press T on foot to call a taxi fare, G for a delivery run. Drive through the Sunset Pier gate for a time trial.', 60, 120 + STORY.length * 64 + 20);
   ctx.fillText('M or Esc to close.', 60, 120 + STORY.length * 64 + 46);
   ctx.restore();
 }

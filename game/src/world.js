@@ -2,7 +2,7 @@
 // who walk its sidewalks and the particles that make it feel alive.
 // All art is drawn from data — no image files anywhere.
 
-import { WORLD } from './config.js';
+import { WORLD, PLACES } from './config.js';
 
 /** Road centrelines, both directions. */
 export function roadCenters() {
@@ -30,11 +30,59 @@ function roadDistance(x, y) {
 
 const BUILDING_COLORS = ['#b98a5e', '#8a6f5c', '#7a5a6e', '#5e7a8a', '#a88a6a', '#9a7a5a', '#6e7a5e'];
 
+/** The beach strip: water at the far west edge, sand, then the boardwalk road. */
+function createBeach(rng) {
+  const palms = [];
+  for (let y = 140; y < WORLD.size - 100; y += 150) {
+    palms.push({ x: rng.range(130, 225), y: y + rng.range(-40, 40), r: rng.range(9, 13) });
+  }
+  // A few palms around the plaza too.
+  for (let i = 0; i < 6; i += 1) {
+    palms.push({ x: rng.range(820, 980), y: rng.range(820, 980), r: rng.range(9, 13) });
+  }
+  return { water: { x: 0, w: 110 }, sand: { x: 110, w: 130 }, palms };
+}
+
+/** Street lamps: one at each intersection corner, for the evening glow. */
+function createLamps() {
+  const lamps = [];
+  for (const cx of roadCenters()) {
+    for (const cy of roadCenters()) {
+      lamps.push({ x: cx + WORLD.roadWidth / 2 + 12, y: cy + WORLD.roadWidth / 2 + 12 });
+    }
+  }
+  return lamps;
+}
+
+/** Named signs that stand by the city's places, so the map reads at a glance. */
+function createLandmarks() {
+  const spots = [
+    { key: 'pier', dx: 70, dy: -70 },
+    { key: 'plaza', dx: 70, dy: -70 },
+    { key: 'garage', dx: -70, dy: 70 },
+    { key: 'hotel', dx: 70, dy: 70 },
+    { key: 'market', dx: -70, dy: -70 },
+    { key: 'docks', dx: 70, dy: -70 },
+    { key: 'hospital', dx: -70, dy: 70 },
+    { key: 'station', dx: 70, dy: -70 },
+    { key: 'beach', dx: 70, dy: 70 },
+    { key: 'bank', dx: 70, dy: -70 },
+    { key: 'safehouse', dx: -70, dy: -70 },
+    { key: 'park', dx: 70, dy: 70 },
+  ];
+  return spots.map((s) => {
+    const p = PLACES[s.key];
+    return { x: p.x + s.dx, y: p.y + s.dy, label: p.label.toUpperCase() };
+  });
+}
+
 /** Build the city from a seeded rng: buildings fill every block, some blocks are parks. */
 export function createCity(rng) {
   const buildings = [];
   const parks = [];
   const trees = [];
+  const stalls = [];
+  const ponds = [];
   const centers = roadCenters();
   for (let bx = 0; bx < centers.length; bx += 1) {
     for (let by = 0; by < centers.length; by += 1) {
@@ -45,6 +93,32 @@ export function createCity(rng) {
       const w = x1 - x0;
       const h = y1 - y0;
       if (w <= 0 || h <= 0) continue;
+      // The Old Market square: a plaza of stalls instead of buildings.
+      if (bx === 2 && by === 4) {
+        parks.push({ x: x0, y: y0, w, h });
+        for (let sx = 0; sx < 3; sx += 1) {
+          for (let sy = 0; sy < 2; sy += 1) {
+            stalls.push({
+              x: x0 + 60 + sx * 300,
+              y: y0 + 70 + sy * 190,
+              w: 180,
+              h: 110,
+              color: rng.pick(['#d94f4f', '#f2c230', '#2ec4b6', '#8a5fc9', '#e8912d']),
+            });
+          }
+        }
+        continue;
+      }
+      // Sunset Park: lawn, a pond and a ring of trees.
+      if (bx === 1 && by === 1) {
+        parks.push({ x: x0, y: y0, w, h });
+        ponds.push({ x: x0 + w * 0.62, y: y0 + h * 0.55, r: 90 });
+        const count = rng.int(10, 14);
+        for (let i = 0; i < count; i += 1) {
+          trees.push({ x: rng.range(x0 + 20, x1 - 20), y: rng.range(y0 + 20, y1 - 20), r: rng.range(10, 18) });
+        }
+        continue;
+      }
       if (rng.chance(0.16)) {
         parks.push({ x: x0, y: y0, w, h });
         const count = rng.int(4, 9);
@@ -73,7 +147,7 @@ export function createCity(rng) {
       }
     }
   }
-  return { buildings, parks, trees };
+  return { buildings, parks, trees, stalls, ponds, beach: createBeach(rng), lamps: createLamps(), landmarks: createLandmarks() };
 }
 
 /** Push a circle out of every building it overlaps; returns true when a hit happened. */
@@ -134,16 +208,20 @@ export function randomSidewalkPoint(rng) {
 
 const PED_COLORS = ['#e8b4a0', '#d9a066', '#a87c5a', '#7a9ab8', '#c98a8a', '#8aa87c', '#b8a86a'];
 
-/** One pedestrian: walks the sidewalks, flees from danger, falls when hit. */
+/** One pedestrian: walks the sidewalks, flees from danger, falls when hit.
+ *  Kinds: walkers stroll, joggers hurry, workers wear hi-vis vests. */
 export function createPed(rng, city) {
   const p = randomSidewalkPoint(rng);
+  const kind = rng.chance(0.2) ? 'jogger' : rng.chance(0.25) ? 'worker' : 'walker';
   return {
     x: p.x,
     y: p.y,
     angle: rng.range(0, Math.PI * 2),
-    speed: rng.range(45, 80),
+    speed: kind === 'jogger' ? rng.range(110, 150) : rng.range(45, 80),
     state: 'walk',
-    color: rng.pick(PED_COLORS),
+    color: kind === 'worker' ? '#e8912d' : rng.pick(PED_COLORS),
+    kind,
+    r: kind === 'jogger' ? 7 : 9,
     timer: rng.range(2, 8),
     down: 0,
     axis: rng.chance(0.5) ? 'h' : 'v',

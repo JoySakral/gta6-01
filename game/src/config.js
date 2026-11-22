@@ -40,6 +40,10 @@ export const PLACES = {
   docks: { x: 300, y: 3300, label: 'Harbor Docks' },
   hospital: { x: 2700, y: 2100, label: 'City Hospital' },
   station: { x: 900, y: 2100, label: 'Police Station' },
+  beach: { x: 300, y: 1500, label: 'Boardwalk Beach' },
+  bank: { x: 2700, y: 300, label: 'Sunset Bank' },
+  safehouse: { x: 3300, y: 2700, label: 'Safe House' },
+  park: { x: 1500, y: 1500, label: 'Sunset Park' },
 };
 
 /** Heat thresholds: how much heat each wanted star needs. */

@@ -4,6 +4,7 @@
 import { PLACES } from './config.js';
 import { createCar, nearestCar } from './vehicles.js';
 import { randomRoadPoint } from './world.js';
+import { addCrime } from './police.js';
 
 export const STORY = [
   {
@@ -47,6 +48,38 @@ export const STORY = [
       { type: 'timedReach', x: PLACES.docks.x, y: PLACES.docks.y, r: 110, time: 120, label: 'Deliver to the Harbor Docks' },
     ],
   },
+  {
+    id: 'beach-run',
+    title: 'Beach Run',
+    briefing: 'Mara has a friend waiting at Boardwalk Beach. Pick them up and drive them to the Safe House across town.',
+    reward: 600,
+    steps: [
+      { type: 'reach', x: PLACES.beach.x, y: PLACES.beach.y, r: 90, label: 'Go to Boardwalk Beach' },
+      { type: 'pickup', label: 'Wait for the friend to get in' },
+      { type: 'reach', x: PLACES.safehouse.x, y: PLACES.safehouse.y, r: 100, label: 'Drive to the Safe House' },
+    ],
+  },
+  {
+    id: 'heavy-load',
+    title: 'Heavy Load',
+    briefing: 'A cargo truck sits at the Harbor Docks with Mara’s name on it. Take it and haul it to Marlin Garage.',
+    reward: 800,
+    steps: [
+      { type: 'stealMarked', label: 'Take the cargo truck' },
+      { type: 'reach', x: PLACES.garage.x, y: PLACES.garage.y, r: 100, label: 'Haul the truck to Marlin Garage' },
+    ],
+  },
+  {
+    id: 'big-score',
+    title: 'The Big Score',
+    briefing: 'The Sunset Bank job. Grab the cash and run it to Sunset Pier — and the alarms are already ringing.',
+    reward: 1000,
+    steps: [
+      { type: 'reach', x: PLACES.bank.x, y: PLACES.bank.y, r: 90, label: 'Get to the Sunset Bank' },
+      { type: 'pickup', label: 'Grab the cash' },
+      { type: 'timedReach', x: PLACES.pier.x, y: PLACES.pier.y, r: 110, time: 150, label: 'Run the cash to Sunset Pier' },
+    ],
+  },
 ];
 
 export function createMissionState() {
@@ -80,6 +113,17 @@ export function startMission(game, index) {
     car.marked = true;
     game.cars.push(car);
     m.markedCar = car;
+  }
+  if (def.id === 'heavy-load') {
+    const truck = createCar('truck', PLACES.docks.x, PLACES.docks.y, 0, '#a0a0a0');
+    truck.driver = 'none';
+    truck.marked = true;
+    game.cars.push(truck);
+    m.markedCar = truck;
+  }
+  if (def.id === 'big-score') {
+    // The alarms are already ringing when the job starts.
+    addCrime(game, 30, 'bank job');
   }
 }
 
@@ -225,6 +269,55 @@ export function updateTaxi(game, dt) {
     game.cash += taxi.fare;
     game.events.push({ type: 'cash', amount: taxi.fare, label: `Taxi fare paid: $${taxi.fare}` });
     game.taxi = null;
+  }
+}
+
+// ---- Free-roam delivery runs: pick up a package, run it across town. ----
+
+export function startDelivery(game) {
+  if (game.delivery || game.taxi || game.mission.active) return false;
+  const rng = game.rng;
+  const p1 = randomRoadPoint(rng);
+  const p2 = randomRoadPoint(rng);
+  if (Math.hypot(p1.x - p2.x, p1.y - p2.y) < 900) return false;
+  const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+  game.delivery = {
+    phase: 'pickup',
+    pickup: { x: p1.x, y: p1.y },
+    dropoff: { x: p2.x, y: p2.y },
+    pay: Math.round(70 + dist / 10),
+    timer: 120,
+    wait: 0,
+  };
+  game.banner = { title: 'Delivery run', sub: `Pick up the package — pays $${game.delivery.pay}.`, t: 3 };
+  return true;
+}
+
+export function updateDelivery(game, dt) {
+  const delivery = game.delivery;
+  if (!delivery) return;
+  const player = game.player;
+  const px = player.car ? player.car.x : player.x;
+  const py = player.car ? player.car.y : player.y;
+  delivery.timer -= dt;
+  if (delivery.timer <= 0) {
+    game.delivery = null;
+    game.banner = { title: 'Delivery late', sub: 'The client gave the package to someone else.', t: 3 };
+    return;
+  }
+  if (delivery.phase === 'pickup') {
+    if (Math.hypot(px - delivery.pickup.x, py - delivery.pickup.y) < 90) {
+      delivery.wait += dt;
+      if (delivery.wait > 1) {
+        delivery.phase = 'dropoff';
+        delivery.wait = 0;
+        game.events.push({ type: 'stepDone', label: 'Package collected — deliver it across town' });
+      }
+    }
+  } else if (Math.hypot(px - delivery.dropoff.x, py - delivery.dropoff.y) < 100) {
+    game.cash += delivery.pay;
+    game.events.push({ type: 'cash', amount: delivery.pay, label: `Delivery paid: $${delivery.pay}` });
+    game.delivery = null;
   }
 }
 

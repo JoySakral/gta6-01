@@ -9,12 +9,12 @@
 
 import { STEP, WORLD, PLAYER, SAVE_KEY, SPAWN, PLACES, WANTED } from './config.js';
 import { createRandom } from './random.js';
-import { createInput, ACTION_CONFIRM, ACTION_PAUSE, ACTION_INTERACT, ACTION_PUNCH, ACTION_MISSIONS, ACTION_TAXI } from './input.js';
+import { createInput, ACTION_CONFIRM, ACTION_PAUSE, ACTION_INTERACT, ACTION_PUNCH, ACTION_MISSIONS, ACTION_TAXI, ACTION_DELIVERY } from './input.js';
 import { createAudio } from './audio.js';
 import { createCity, createPed, updatePeds, createParticles, updateParticles, collideBuildings, burst } from './world.js';
 import { spawnCityCars, createCar, nearestCar, enterCar, exitCar, drivePlayerCar, updateTraffic, collideCarsAndPeds, carCircles } from './vehicles.js';
 import { createWanted, addCrime, updateWanted, updatePolice } from './police.js';
-import { STORY, createMissionState, startMission, currentStep, missionTarget, updateMissions, startTaxiFare, updateTaxi, updateTrial, TRIAL_CHECKPOINTS, nearestUsableCar } from './missions.js';
+import { STORY, createMissionState, startMission, currentStep, missionTarget, updateMissions, startTaxiFare, updateTaxi, startDelivery, updateDelivery, updateTrial, TRIAL_CHECKPOINTS, nearestUsableCar } from './missions.js';
 import { drawHUD, drawTitle, drawPaused, drawMissionList, drawEventOverlay } from './hud.js';
 import { createRenderer, drawWorld } from './render.js';
 import { stageShot } from './shots.js';
@@ -57,6 +57,7 @@ function createGame(seedValue) {
     wanted: createWanted(),
     mission: createMissionState(),
     taxi: null,
+    delivery: null,
     trial: { active: false, cp: 0, time: 0, best: null, next: null },
     cash: 0,
     stats: { stolen: 0, crimes: 0 },
@@ -72,7 +73,7 @@ function createGame(seedValue) {
     titleButtons: null,
   };
   spawnCityCars(game);
-  for (let i = 0; i < 24; i += 1) game.peds.push(createPed(rng, game.city));
+  for (let i = 0; i < 32; i += 1) game.peds.push(createPed(rng, game.city));
   return game;
 }
 
@@ -148,6 +149,7 @@ function respawnAt(place, reason) {
   game.player.invuln = 2;
   game.wanted = createWanted();
   game.taxi = null;
+  game.delivery = null;
   game.trial.active = false;
   // Clear police cars.
   game.cars = game.cars.filter((c) => c.driver !== 'police');
@@ -194,6 +196,8 @@ function handleEvents() {
       audio.cash();
       game.banner = { title: `+$${event.amount}`, sub: event.label, t: 3 };
       writeSave();
+    } else if (event.type === 'policeSpawned') {
+      audio.radio();
     } else if (event.type === 'busted') {
       audio.busted();
       game.overlay = { kind: 'busted', title: 'BUSTED', sub: 'The police took you in. You lost 20% of your cash.', t: 3, color: '#3f7de0' };
@@ -313,13 +317,21 @@ function updateObjective() {
     game.currentTarget = t.phase === 'pickup' ? t.pickup : t.dropoff;
     return;
   }
+  if (game.delivery) {
+    const d = game.delivery;
+    game.objectiveText = d.phase === 'pickup'
+      ? `Delivery $${d.pay}: pick up the package — ${Math.ceil(d.timer)}s`
+      : `Delivery $${d.pay}: drop off the package — ${Math.ceil(d.timer)}s`;
+    game.currentTarget = d.phase === 'pickup' ? d.pickup : d.dropoff;
+    return;
+  }
   if (game.trial.active) {
     game.objectiveText = `Time trial: checkpoint ${game.trial.cp + 1} of 3 — ${game.trial.time.toFixed(1)}s`;
     game.trial.next = TRIAL_CHECKPOINTS[game.trial.cp] || null;
     game.currentTarget = game.trial.next;
     return;
   }
-  game.objectiveText = 'Free roam — M: jobs, T: taxi fare, pier gate: time trial';
+  game.objectiveText = 'Free roam — M: jobs, T: taxi fare, G: delivery run, pier gate: time trial';
   game.trial.next = null;
   game.currentTarget = null;
 }
@@ -379,6 +391,10 @@ function step(dt, actions) {
   if (actions & ACTION_TAXI) {
     startTaxiFare(game);
   }
+  // Delivery run on demand.
+  if (actions & ACTION_DELIVERY) {
+    if (startDelivery(game)) audio.delivery();
+  }
 
   // Player.
   if (game.player.car) {
@@ -388,12 +404,23 @@ function step(dt, actions) {
     game.player.y = car.y;
     game.player.angle = car.angle;
     if (result.skid) {
-      const bx = car.x - Math.cos(car.angle) * car.len / 2;
-      const by = car.y - Math.sin(car.angle) * car.len / 2;
-      game.particles.push({
-        x: bx, y: by, vx: (Math.random() - 0.5) * 30, vy: (Math.random() - 0.5) * 30,
-        life: 0.6, maxLife: 0.6, color: '#888888', size: 4,
-      });
+      // Skid smoke from both rear wheels.
+      const backX = car.x - Math.cos(car.angle) * car.len / 2;
+      const backY = car.y - Math.sin(car.angle) * car.len / 2;
+      const sideX = Math.cos(car.angle + Math.PI / 2);
+      const sideY = Math.sin(car.angle + Math.PI / 2);
+      for (const side of [-1, 1]) {
+        game.particles.push({
+          x: backX + sideX * side * car.wid / 2,
+          y: backY + sideY * side * car.wid / 2,
+          vx: (Math.random() - 0.5) * 30,
+          vy: (Math.random() - 0.5) * 30,
+          life: 0.6,
+          maxLife: 0.6,
+          color: '#999999',
+          size: 5,
+        });
+      }
     }
     audio.skid(result.skid);
     audio.engine(Math.min(1, Math.abs(car.speed) / car.maxSpeed), true);
@@ -416,6 +443,7 @@ function step(dt, actions) {
   // Missions and side work.
   updateMissions(game, dt);
   updateTaxi(game, dt);
+  updateDelivery(game, dt);
   updateTrial(game, dt);
 
   // Police siren when a police car is close.
@@ -562,8 +590,9 @@ function runGame() {
   requestAnimationFrame(frame);
 }
 
-// For the play-test harness: the live game, its screens and its save key.
-window.__sunset = { game, STEP };
+// For the play-test harness: the live game, its screens and its save key,
+// plus the starters the tests drive missions with.
+window.__sunset = { game, STEP, startMission, addCrime, startDelivery, startTaxiFare };
 
 if (shot) runShot(shot);
 else runGame();
